@@ -12,10 +12,10 @@ use Aws\Exception\AwsException;
 use Aws\TranscribeService\TranscribeServiceClient;
 
 //aws credentials
-$bucket = "ocrscanner2";
-$region = "ap-southeast-1";
-$access_key_id = "AKIAXO4Z5UT4HIRCHUP7";
-$secret_access_key = "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";
+$bucket = "";
+$region = "";
+$access_key_id = "";
+$secret_access_key = "";
 
 //S3 Constructor Object
 $s3 = S3Client::factory(array(
