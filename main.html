@@ -1,0 +1,110 @@
+<html>
+    <head>
+        <title>Transcribe Audio</title>
+    </head>
+    <body>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+        <script type="text/javascript">
+
+            function processAudio(){
+                document.getElementById('procIndicator').style.opacity = 100;
+
+                //file info from url
+                var audioUrl = document.getElementById('inputAudioUrl').value;
+                var filename = audioUrl.split('/').pop();
+                var extension = audioUrl.split('.').pop().toLowerCase();
+                var supportedFormats = ["mp3", "mp4", "wav", "flac"];
+                
+                if(supportedFormats.includes(extension)){
+                    //ajax object
+                    var xmlhttp = new XMLHttpRequest();
+                    xmlhttp.onreadystatechange = function(){
+                        
+                        //displays processing icon still readyState executed
+                        var dots = ""
+                        var interval = setInterval(() => {
+                            if(this.readyState == 4){
+                                clearInterval(interval);
+                                return;
+                            }
+                            dots = (dots.length < 3) ? (dots + ".") : "";
+                            document.getElementById('procIndicator').innerHTML = "Processing" + dots;
+                        }, 500);
+
+                        //server execution successful
+                        if(this.readyState == 4 && this.status == 200){
+                            try{
+                                //json from server
+                                var jsonResponse = this.responseText
+                                var response = JSON.parse(jsonResponse)
+                                var result = response.results
+
+                                //timestraping data
+                                var items = result['items']
+                                var timeStrap = ""
+                                for(x of Object.values(items)){
+                                    if(x.type == "pronunciation"){
+                                        timeStrap += ("\n" + x.start_time + ": " + x.alternatives[0].content)
+                                    }
+                                    else if(x.type == "punctuation"){
+                                        timeStrap += x.alternatives[0].content
+                                    }
+                                }
+
+                                //displays result
+                                document.getElementById("responseTextArea").innerHTML = result['transcripts'][0].transcript;
+                                document.getElementById("timeStrap").innerHTML = timeStrap;
+                                document.getElementById('procIndicator').innerHTML = "DONE";
+                            } catch(err){
+                                //error occurred during processing json text
+                                console.log(err)
+                                alert("Unable to transcribe audio. Please try again!!!\n"+err)
+                                document.getElementById('procIndicator').innerHTML = "Unable to transcribe audio";
+                            }
+                        }
+                        else if(this.status == 500){
+                            //error code at transcribe.php
+                            alert("Internal Server Error\n Please try again.")
+                            console.log(this.responseText)
+                        }
+                    }
+                    xmlhttp.open("GET", "transcribe.php?audioUrl="+audioUrl, true);
+                    xmlhttp.send();
+                }
+                else{
+                    //unsupported file formats
+                    alert("Please enter the url of supported formats\nSupported formats are mp3, mp4, wav and flac")
+                    document.getElementById('procIndicator').innerHTML = "Unsupported format audio";
+                }
+            }
+        </script>
+
+
+        <h1>Transcribe audio & video files to text:</h1>
+        <p>Enter the URL of file to get <strong>transcribed text</strong></p>
+        <br><br>
+
+        <div id="wrapper" style="display: flex;">
+
+            <!--Input div-->
+            <div id="inputDiv" style="flex: 50%;">
+                <h3>Audio url to transcribe:</h3>
+                <form action="#" onsubmit="processAudio()">
+                    <input type="text" id="inputAudioUrl" placeholder="Please enter your audio url" value="" required/>
+                    <button type="submit">Read image</button>
+                    <p id="procIndicator" style="opacity:0">Processing</p>
+                </form>
+            </div>
+
+            <!--Output div-->
+            <div id="outputDiv" style="flex:50%">
+                <!--Transcribed text-->
+                <h3>Response:</h3>
+                <textarea id="responseTextArea" class="UIInput" style="width:80%; height:400px;"></textarea>
+                <!--Time strapped data-->
+                <br><br><h3>Time Strap</h3>
+                <textarea id="timeStrap" class="UIInput" style="width:80%; height:400px;"></textarea>
+            </div>
+        </div>
+    </body>
+</html>
