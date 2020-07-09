@@ -37,20 +37,38 @@ $transcribeClient = new TranscribeServiceClient([
     ),
 ]);
 
-if($_REQUEST['audioUrl']){
+if(isset($_REQUEST['audioUrl'], $_REQUEST['toDownload'])){
     $url = $_REQUEST['audioUrl'];
+    $toDownload = $_REQUEST['toDownload'];
 
     try{
+        if($toDownload == "true"){
         //downloads audio file to server
-        $tempFilePath = basename($url);
-        $tempFile = fopen($tempFilePath, "w") or die("Error: Unable to open file.");
-        $fileContents = file_get_contents($url);
-        $tempFile = file_put_contents($tempFilePath, $fileContents);
+            $tempFilePath = explode("?", basename($url))[0];
+            $tempFile = fopen($tempFilePath, "w") or die("Error: Unable to open file.");
+            $fileContents = file_get_contents($url);
+            $tempFile = file_put_contents($tempFilePath, $fileContents);
+        }
+        else{
+            $tempFilePath = basename($url);
+        }
         
         //temp file info
         $path_info = pathinfo($tempFilePath);
         $ext = $path_info['extension'];
         $filename = $path_info['filename'];
+
+        $joblist = array();
+        $jsonlistObj = $transcribeClient->listTranscriptionJobs();
+        foreach($jsonlistObj['TranscriptionJobSummaries'] as $job){
+            if($job['TranscriptionJobStatus'] == "COMPLETED")
+            array_push($joblist, $job['TranscriptionJobName']);
+        }
+        if(in_array($filename, $joblist)){
+            $jobdel = $transcribeClient->deleteTranscriptionJob([
+                'TranscriptionJobName' => $filename,
+            ]);
+        }
 
         //uploads temp file to s3 bucket
         $upload = $s3->putObject([
@@ -117,7 +135,7 @@ if($_REQUEST['audioUrl']){
                 try {unlink($tempFilePath);} catch(Exception $ex) {}
 
                 header('Content-Type: application/json');
-                echo json_encode(array('result' => "Unable to process file"));
+                echo json_encode(array('results' => "Unable to process file"));
                 exit;
             }
             sleep(3);

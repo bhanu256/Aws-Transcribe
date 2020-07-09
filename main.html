@@ -6,82 +6,155 @@
         <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
         <script type="text/javascript">
 
-            function processAudio(){
-                document.getElementById('procIndicator').style.opacity = 100;
+            function uploadToS3(file){
+                //passes file to upload.php using ajax object
+                return new Promise(function(resolve, reject){
+                    var fileData = new FormData();
+                fileData.append('audio', file);
 
-                //file info from url
-                var audioUrl = document.getElementById('inputAudioUrl').value;
-                var filename = audioUrl.split('/').pop();
-                var extension = audioUrl.split('.').pop().toLowerCase();
-                var supportedFormats = ["mp3", "mp4", "wav", "flac"];
-                
-                if(supportedFormats.includes(extension)){
-                    //ajax object
-                    var xmlhttp = new XMLHttpRequest();
-                    xmlhttp.onreadystatechange = function(){
-                        
-                        //displays processing icon still readyState executed
-                        var dots = ""
-                        var interval = setInterval(() => {
-                            if(this.readyState == 4){
-                                clearInterval(interval);
-                                return;
-                            }
-                            dots = (dots.length < 3) ? (dots + ".") : "";
-                            document.getElementById('procIndicator').innerHTML = "Processing" + dots;
-                        }, 500);
+                var xhr = new XMLHttpRequest()
+                xhr.open('POST', 'upload.php', true);
 
-                        //server execution successful
-                        if(this.readyState == 4 && this.status == 200){
-                            try{
-                                //json from server
-                                var jsonResponse = this.responseText
-                                var response = JSON.parse(jsonResponse)
-                                var result = response.results
+                xhr.upload.onprogress = function(e){
+                    if(e.lengthComputable){
+                        var percentage = (e.loaded / e.total) * 100;
+                        document.getElementById('procIndicator').innerHTML = "Uploaded " + percentage + "%";
+                    }
+                }
 
-                                //timestraping data
-                                var items = result['items']
-                                var timeStrap = ""
-                                for(x of Object.values(items)){
-                                    if(x.type == "pronunciation"){
-                                        timeStrap += ("\n" + x.start_time + ": " + x.alternatives[0].content)
-                                    }
-                                    else if(x.type == "punctuation"){
-                                        timeStrap += x.alternatives[0].content
-                                    }
-                                }
-
-                                //displays result
-                                document.getElementById("responseTextArea").innerHTML = result['transcripts'][0].transcript;
-                                document.getElementById("timeStrap").innerHTML = timeStrap;
-                                document.getElementById('procIndicator').innerHTML = "DONE";
-                            } catch(err){
-                                //error occurred during processing json text
-                                console.log(err)
-                                alert("Unable to transcribe audio. Please try again!!!\n"+err)
-                                document.getElementById('procIndicator').innerHTML = "Unable to transcribe audio";
-                            }
+                xhr.onload = function(){
+                    try{
+                        if(this.status == 200){
+                            url = JSON.parse(this.response)['url']
+                            transcribe(url, "false")
                         }
-                        else if(this.status == 500){
-                            //error code at transcribe.php
-                            alert("Internal Server Error\n Please try again.")
-                            console.log(this.responseText)
+                        else{
+                            throw "code error"
+                            console.log(this.response)
                         }
                     }
-                    xmlhttp.open("GET", "transcribe.php?audioUrl="+audioUrl, true);
-                    xmlhttp.send();
+                    catch(err){
+                        alert("Error uploading audio. Please try again.")
+                        document.getElementById('procIndicator').innerHTML = "Couldn't upload file"
+                    }
+                }
+                xhr.send(fileData)
+                })
+
+            }
+
+            function supported(fileloc, det){
+                // checks whether the selected url/file is valid format
+                // returns true/false
+                var filename = fileloc.split(det).pop();
+                filename = filename.split('?')[0]
+                var extension = filename.split('.').pop().toLowerCase();
+                var supportedFormats = ["mp3", "wav"];
+                
+                if(!supportedFormats.includes(extension)){
+                    //unsupported file formats
+                    alert("Please enter the url of supported formats\nSupported formats are mp3 and wav")
+                    document.getElementById('procIndicator').innerHTML = "Unsupported format audio";
+                    return false;
+                }
+                return true;
+            }
+
+            function transcribe(url, toDownload){
+                // passes url to transcribe.php using ajax object
+                // url : audio url/s3 url
+                // toDownload : justifies to download audio file to server or not
+                var xmlhttp = new XMLHttpRequest();
+                xmlhttp.onreadystatechange = function(){
+                        
+                    //displays processing icon still readyState executed
+                    var dots = ""
+                    var interval = setInterval(() => {
+                        if(this.readyState == 4){
+                            clearInterval(interval);
+                            return;
+                        }
+                        dots = (dots.length < 3) ? (dots + ".") : "";
+                        document.getElementById('procIndicator').innerHTML = "Processing" + dots;
+                    }, 500);
+
+                    try{
+                        if(this.readyState == 4 && this.status == 200){
+                            //json from server
+                            var jsonResponse = this.responseText
+                            var response = JSON.parse(jsonResponse)
+                            var result = response.results
+
+                            //timestraping data
+                            var items = result['items']
+                            var timeStrap = ""
+                            for(x of Object.values(items)){
+                                if(x.type == "pronunciation"){
+                                    timeStrap += ("\n" + x.start_time + ": " + x.alternatives[0].content)
+                                }
+                                else if(x.type == "punctuation"){
+                                    timeStrap += x.alternatives[0].content
+                                }
+                            }
+
+                            //displays result
+                            document.getElementById("responseTextArea").innerHTML = result['transcripts'][0].transcript;
+                            document.getElementById("timeStrap").innerHTML = timeStrap;
+                            document.getElementById('procIndicator').innerHTML = "DONE";
+                        }
+                        else if(this.status == 500){
+                            throw "code error!";
+                        }
+                    }
+                    catch(err){
+                        alert("Error transcribing your audio. Please try again")
+                        document.getElementById('procIndicator').innerHTML = "Error!!"
+                        console.log(this.responseText)
+                    }
+                
+                }
+                xmlhttp.open("POST", "transcribe.php", true);
+                xmlhttp.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+                xmlhttp.send("audioUrl="+url+"&toDownload="+toDownload);
+            }
+
+            /* User selects url/local file
+             * processAudio branches out the operation based on user selection
+             * for local file, file is directly uploaded to s3
+             * for audio url, file is downloaded as temp file in server, later uploaded to s3
+             * s3 url to send for transcription, returns json
+             */
+            async function processAudio(){
+                // provides abstraction internal function to user
+                var audioUrl = document.getElementById('inputAudioUrl').value;
+                var audioFile = document.getElementById('inputFile').value;
+
+                document.getElementById('procIndicator').style.opacity = 100;
+
+                // user selects local file
+                if(audioFile != "") {
+                    var file = document.getElementById('inputFile').files[0]
+                    if(supported(file.name, " ")){
+                        uploadToS3(file)
+                    }
+                }
+                // user selects audio file url
+                else if(audioUrl != "") {
+                    if(supported(audioUrl, '/')){
+                        transcribe(audioUrl, "true")
+                    }
                 }
                 else{
-                    //unsupported file formats
-                    alert("Please enter the url of supported formats\nSupported formats are mp3, mp4, wav and flac")
-                    document.getElementById('procIndicator').innerHTML = "Unsupported format audio";
+                    alert("No file/url found")
+                    document.getElementById('procIndicator').innerHTML = "Please enter url/file.";
                 }
+                return;
             }
         </script>
 
 
-        <h1>Transcribe audio & video files to text:</h1>
-        <p>Enter the URL of file to get <strong>transcribed text</strong></p>
+        <h1>Transcribe audio files to text:</h1>
+        <p>Enter the URL of file to get <strong>transcribed text</strong><br>Supported file formats are mp3 and wav</p>
         <br><br>
 
         <div id="wrapper" style="display: flex;">
@@ -89,8 +162,9 @@
             <!--Input div-->
             <div id="inputDiv" style="flex: 50%;">
                 <h3>Audio url to transcribe:</h3>
-                <form action="#" onsubmit="processAudio()">
-                    <input type="text" id="inputAudioUrl" placeholder="Please enter your audio url" value="" required/>
+                <form action="" onsubmit="processAudio(); return false;">
+                    <input type="text" id="inputAudioUrl" placeholder="Please enter your audio url" value="" />
+                    <input type="file" id="inputFile" placeholder="Please upload the file" value="" accept="audio/*"/>
                     <button type="submit">Read image</button>
                     <p id="procIndicator" style="opacity:0">Processing</p>
                 </form>
