@@ -8,10 +8,10 @@
 
         require 'aws.phar';
         
-        $bucket = "ocrscanner2";
-        $region = "ap-southeast-1";
-        $access_key_id = "AKIAXO4Z5UT4HIRCHUP7";
-        $secret_access_key = "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";
+        $bucket = "";
+        $region = "";
+        $access_key_id = "";
+        $secret_access_key = "";
 
 		$s3 = new Aws\S3\S3Client([
 			'region'  => $region,
